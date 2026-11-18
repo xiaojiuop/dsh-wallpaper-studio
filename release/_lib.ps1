@@ -270,7 +270,6 @@ function Push-RepoViaApi {
   $i = 0
   foreach ($rel in $files) {
     $i++
-    if ($seeded -and $rel -eq $seeded) { continue }
     $full = Join-Path $root ($rel -replace '/', '\')
     if (-not (Test-Path -LiteralPath $full)) { throw "工作区缺文件：$rel" }
     $b64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($full))
