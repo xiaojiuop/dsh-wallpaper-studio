@@ -1,0 +1,8 @@
+# dsh-wallpaper-studio — bundle patch layer.
+# `dsh plugin --profile web add` composes this layer, so the host loader puts
+# the package into the plugin tree and the ClientModuleRegistry can then
+# discover its `dsh.client` browser half.
+
+- insert:
+    - id: dsh-wallpaper-studio
+      name: 'dsh-wallpaper-studio'

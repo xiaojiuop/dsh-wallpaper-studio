@@ -1,0 +1,68 @@
+{
+  "name": "dsh-wallpaper-studio",
+  "version": "0.1.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiaojiuop/dsh-wallpaper-studio.git"
+  },
+  "homepage": "https://github.com/xiaojiuop/dsh-wallpaper-studio#readme",
+  "bugs": {
+    "url": "https://github.com/xiaojiuop/dsh-wallpaper-studio/issues"
+  },
+  "description": "动态壁纸工作室 for DeepSeek Harness (DSH)：上传图片/视频做全屏动态壁纸，自定义主题色与多面透明度，附液态玻璃式设置卡片。Dynamic wallpaper + theme color + transparency studio for the DSH Web GUI / DSH Desktop.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "wallpaper",
+    "theme",
+    "background",
+    "transparency"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "icon": "./icon.png",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "icon.png",
+    "locale/*.json",
+    "src",
+    "scripts",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "check": "node scripts/check-client-bundle.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "prepack": "node scripts/build-client.mjs && node scripts/check-client-bundle.mjs"
+  }
+}
