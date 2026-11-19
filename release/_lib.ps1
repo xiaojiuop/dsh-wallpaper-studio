@@ -198,9 +198,11 @@ function Invoke-GitHub {
     return Invoke-RestMethod @params
   } catch {
     $status = Get-HttpStatus $_
+    $detail = Get-HttpErrorDetail $_
     # 409 也是「还没有」：全新空仓库读 git/ref 会回 409 Git Repository is empty.
     if ($Allow404 -and ($status -eq 404 -or $status -eq 409)) { return $null }
-    $detail = Get-HttpErrorDetail $_
+    # 422 Reference does not exist：删一个本来就不存在的分支（fork 第一次跑时就是这样）
+    if ($Allow404 -and $status -eq 422 -and $detail -match 'Reference does not exist') { return $null }
     throw "GitHub $Method $Path 失败（HTTP $status）：`n$detail"
   }
 }
