@@ -148,6 +148,7 @@ powershell -ExecutionPolicy Bypass -File release\deprecate-old.ps1
 | npm `EOTP` / 要求 2FA | 令牌类型不对，重建一个 **Automation** 令牌 |
 | `push` 被拒（non-fast-forward / 远端已有提交） | 远端初始化过：`git pull --rebase` 后再跑，或删掉远端多出来的提交 |
 | 市场提示仓库只有 N 小时 | 等满 24 小时；本地演练可加 `-AllowYoungRepo`，但 CI 仍会拒 |
+| `422 Reference does not exist`（删分支） | fork 第一次跑时那个分支本来就不存在。脚本已把这种 422 当成「没有这个分支」处理，重跑即可，不会中断 |
 | 市场提示上游已有同名条目 | 你之前提过或已被收录，别再提第二个 |
 | `icon.png 超过 256 KiB` | 打包脚本会直接拦下，重新压一张 512×512 的图（当前 233 KB，余量 23 KB） |
 
