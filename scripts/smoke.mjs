@@ -2,7 +2,7 @@
  * smoke.mjs — 免宿主的离线冒烟：
  *   1. bundle 能被当作经典脚本执行，并向 __ModuleLoader__ 注册自己；
  *   2. 工厂返回值是插件模块表（name / inject / apply）；
- *   3. apply 能跑在假 ctx 上，注册到 plugins.bundle.config / settings.plugin.item 与 sidebar.footer.action；
+ *   3. apply 能跑在假 ctx 上，注册到 plugins.bundle.config / settings.plugin.item / sidebar.panellist / main；
  *   4. 词典 zh / en 键位一致，设置卡片能靠 locale 取到所有文案键；
  *   5. 卸载（effect disposer）后不残留注册。
  */
@@ -67,6 +67,9 @@ const localeDicts = [];
 
 const fakeCtx = {
   logger: { info() {}, warn() {}, error() {} },
+  get(name) {
+    return name === 'layout' ? { selectPanel() {} } : undefined;
+  },
   effect(fn, label) {
     const d = fn();
     if (typeof d === 'function') disposers.push(d);
@@ -98,10 +101,28 @@ try {
 }
 
 const slotNames = registeredSlots.map((r) => r.options.name);
-['plugins.bundle.config', 'settings.plugin.item', 'sidebar.footer.action'].forEach((name) => {
+['plugins.bundle.config', 'settings.plugin.item', 'sidebar.panellist', 'main'].forEach((name) => {
   if (!slotNames.includes(name)) failures.push('未注册槽位 ' + name);
   else pass.push('注册槽位 ' + name);
 });
+
+/* 左侧栏入口与主区面板页必须成对出现，id / key 一致才能互相导航 */
+const entry = registeredSlots.find((r) => r.options.name === 'sidebar.panellist');
+const page = registeredSlots.find((r) => r.options.name === 'main');
+if (entry) {
+  if (entry.options.id !== 'wallpaper-studio') failures.push('sidebar.panellist 的 id 应为 wallpaper-studio');
+  else pass.push('sidebar.panellist id=wallpaper-studio');
+  if (typeof entry.options.label !== 'function') failures.push('sidebar.panellist 缺本地化 label thunk');
+  else pass.push('sidebar.panellist label()=' + entry.options.label());
+  if (typeof entry.Component !== 'function') failures.push('sidebar.panellist 缺图标组件');
+  else pass.push('sidebar.panellist 图标组件已注册');
+}
+if (page) {
+  if (page.options.key !== 'wallpaper-studio') failures.push('main 面板的 key 应等于壁纸入口 id');
+  else pass.push('main key=wallpaper-studio');
+  if (typeof page.Component !== 'function') failures.push('main 面板缺页面组件');
+  else pass.push('main 面板页面组件已注册');
+}
 
 /* 0.2.x 走 plugins.item（id=包名，宿主按 only: 包 id 过滤），旧版走 settings.plugin.item（key=命名空间） */
 const modernCard = registeredSlots.find((r) => r.options.name === 'plugins.bundle.config');
@@ -124,6 +145,21 @@ if (card) {
   if (!face || !face.controller) failures.push('卡片 inject 面缺 controller');
   else if (typeof face.controller.getSnapshot !== 'function') failures.push('controller 缺 getSnapshot');
   else pass.push('卡片 inject 面提供 controller（getSnapshot / subscribe / patch）');
+  if (face && (!face.controller.saveState || typeof face.controller.saveState.getSnapshot !== 'function')) {
+    failures.push('controller 缺 saveState（保存状态无法显示）');
+  } else if (face && typeof face.controller.save !== 'function') {
+    failures.push('controller 缺 save（显式保存按钮无法落盘）');
+  } else if (face) {
+    pass.push('controller 提供显式保存（save / saveState）');
+  }
+  if (face && face.canOpenPanel !== true) failures.push('有布局服务时卡片应允许打开面板');
+  else if (face) pass.push('卡片 inject 面提供 openPanel / canOpenPanel');
+  if (page) {
+    const pageFace = page.options.inject();
+    if (!pageFace || !pageFace.controller) failures.push('面板页 inject 面缺 controller');
+    else if (typeof pageFace.close !== 'function') failures.push('面板页 inject 面缺 close');
+    else pass.push('面板页 inject 面提供 controller / close');
+  }
 }
 
 if (localeDicts.length === 0) failures.push('未注册 locale 词典');

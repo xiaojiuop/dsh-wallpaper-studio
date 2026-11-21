@@ -20,7 +20,7 @@ DSH 插件市场里「主题与外观」分类最热的壁纸插件是
 | 参考实现的做法 | 本项目 |
 | --- | --- |
 | 全屏背景层 + 遮罩 + 模糊，压在界面最底层 | 同样：`#dws-bg` 固定定位、`z-index:-1`、`inset:-48px` 给模糊留边 |
-| 液态玻璃设置窗、滑条即时生效 | 同一套交互心智：卡片折叠 + 滑杆 + 取色器，改一下立刻生效、无需保存按钮 |
+| 液态玻璃设置窗、滑条即时生效 | 同一套交互心智：卡片折叠 + 滑杆 + 取色器，改一下立刻生效并自动保存；另有显式「保存」按钮确认落盘 |
 | 通过设计令牌把面板调成半透明 | 只覆盖 alias 层令牌，不写宿主私有类名 |
 | 壁纸素材存本地，重启不丢 | Blob 存 IndexedDB，设置存 localStorage |
 
@@ -60,10 +60,15 @@ DSH 插件市场里「主题与外观」分类最热的壁纸插件是
 - 令牌层面生效，因此卡片、侧栏、气泡、菜单、输入条一起跟随，不用逐个写选择器。
 
 ### 其他
+- **左侧栏「壁纸工作室」面板**：左侧栏多一个壁纸图标，点开就是一张全宽控制页，壁纸、效果、
+  主题色、透明度、预设、导入导出都在一屏；右上角「返回对话」一键回到聊天。壁纸关掉时面板里的
+  控件仍然可调，方便先配好再开。插件详情页的设置卡片头部也有一个面板按钮。
 - **6 套配色预设**：默认 / 午夜 / 海洋 / 森林 / 樱粉 / 冰川（一次配好主色 + 底色 + 面板色 +
   透明度 + 内置壁纸）。
 - **配置导入导出**：一串 JSON 就能把整套外观发给别人。
-- **侧栏底部快速开关**：临时关掉壁纸恢复原生界面，不用进设置页。
+- **显式保存与保存状态**：面板头部和设置卡片有「保存」按钮，点击立即写入并显示「已保存」；
+  平时改动仍自动保存，写入失败会红字提示。导入成功提示改为「已导入」，并说明上传的壁纸素材
+  不会写进 JSON。
 
 ---
 
@@ -103,9 +108,8 @@ curl -b /tmp/cj "http://127.0.0.1:3080/plugins/??dsh-wallpaper-studio/client.js&
 ```
 
 **已在真实宿主上验证**（`@deepseek-ai/dsh@0.2.2-rc.1`，Linux + Node 22）：
-`dsh plugin --profile web add ./dsh-wallpaper-studio-0.1.0.tgz` 成功（0.1.2 起同一通道改用下面的
-`dsh-wallpaper-studio.tgz`）→ `--dump-config` 里出现本插件行 →
-启动图 74 项含 `dsh-wallpaper-studio` → bundle 200/54KB → 浏览器里壁纸层注入、`--dws-wall-opacity`
+`dsh plugin --profile web add ./dsh-wallpaper-studio.tgz` 成功 → `--dump-config` 里出现本插件行 →
+启动图 74 项含 `dsh-wallpaper-studio` → bundle 约 0.2/71KB → 浏览器里壁纸层注入、`--dws-wall-opacity`
 生效、侧栏「壁纸工作室」按钮渲染、插件页「已安装插件」显示「运行中」，卡片里 7 个滑条 / 3 个取色器 /
 6 个预设 / 9 个 chip 全部到位，上传图片后壁纸层立刻变成 `blob:`，刷新后从 IndexedDB 自动恢复。
 
@@ -118,7 +122,7 @@ curl -b /tmp/cj "http://127.0.0.1:3080/plugins/??dsh-wallpaper-studio/client.js&
 ## 4. 用起来
 
 **插件 → 已安装插件 → dsh-wallpaper-studio**，点开「查看」就是这张卡片（旧版宿主里位置是
-「设置 → 插件 → 壁纸工作室」）。侧栏底部还有一个「壁纸工作室」快速开关。
+「设置 → 插件 → 壁纸工作室」）。左侧栏点「壁纸工作室」打开完整面板；卡片头部也有「面板」按钮。
 
 | 区块 | 控件 | 说明 |
 | --- | --- | --- |
@@ -136,7 +140,8 @@ curl -b /tmp/cj "http://127.0.0.1:3080/plugins/??dsh-wallpaper-studio/client.js&
 | 配色预设 | 6 个 chip | 一次覆盖颜色 + 透明度 + 内置壁纸，之后还能继续微调 |
 | 导入导出 | 复制配置 / 粘贴应用 / 恢复默认 | 配置就是一段 JSON |
 
-所有改动**即时生效并自动保存**，没有「保存」按钮；关掉插件（或卸载）会把界面完整还原成原生外观。
+所有改动**即时生效并自动保存**；面板头部和设置卡片另有「保存」按钮，点击立即写入并显示「已保存」，
+写入失败（隐私模式 / 配额满）会红字提示，不会静默丢配置。关掉插件（或卸载）会把界面完整还原成原生外观。
 
 ---
 
@@ -159,8 +164,9 @@ curl -b /tmp/cj "http://127.0.0.1:3080/plugins/??dsh-wallpaper-studio/client.js&
 - 工厂返回值就是浏览器 fiber 的插件模块表：`{ name, inject: ['slots','locale'], apply }`。
 - 槽位只用**增量**槽位：`plugins.bundle.config`（0.2.x 插件页里本包的配置区，key = 包名；旧版宿主自动
   换成 `settings.plugin.item`，按启动图里有没有 `dsh-client-ui-plugin-manager` 决定，靠 `locale` 取文案）、
-  `sidebar.footer.action`（快速开关）。不注册 `root` / `sidebar` / `conversation`，
-  所以永远不会把别人的界面顶掉。
+  `sidebar.panellist`（左侧栏面板入口，id = `wallpaper-studio`）
+  与 `main`（同一 id 的主区页面）。不注册 / 不替换 `root` / `sidebar` / `rightbar` / `conversation`，
+  所以永远不会把别人的界面顶掉；宿主没声明这两个槽位时 `slots.inject` 只是静默等待。
 
 ### 5.2 壁纸怎么铺到「最底层」
 ```
@@ -250,7 +256,7 @@ dsh-wallpaper-studio/
 ```bash
 npm run build    # src/client.js → lib/client.js
 npm run check    # 契约/产物静态校验（21 项）
-npm run smoke    # 工厂注册、模块表、槽位注册、词典键位、卸载清理（16 项）
+npm run smoke    # 工厂注册、模块表、槽位注册、保存状态、词典键位、卸载清理（25 项）
 
 # 没有 npm 的机器（比如只装了 DSH 桌面版）直接让 node 跑同一批脚本：
 node scripts/build-client.mjs && node scripts/check-client-bundle.mjs && node scripts/smoke.mjs
@@ -286,6 +292,16 @@ MIT License.
 
 ## 变更记录
 
+- **0.2.0** — 新增左侧栏「壁纸工作室」面板：`sidebar.panellist` 入口（id `wallpaper-studio`）+
+  `main` 同 id 全宽控制页，壁纸 / 效果 / 主题色 / 透明度 / 预设 / 配置保存与导入导出都在一屏；
+  壁纸关闭时仍可调参数，顶部横幅一键启用，「返回对话」回到聊天。插件详情页卡片头增加「面板」按钮，
+  移除侧栏底部的快速开关（开关只保留在卡片和面板顶部）。
+  新增显式保存：`controller.save()` + `saveState`，面板头部和设置卡片都有「保存」按钮，点击立即
+  写入并显示成功 / 失败；配置区显示「已保存 · HH:MM」。`saveSettings` 不再静默吞异常（隐私模式 /
+  配额满会红字提示）。
+  修复：导入成功提示「已复制」→「已导入」；上传失败反馈移到壁纸区；补充「上传素材不会写进 JSON」
+  说明；切换壁纸时清理旧上传素材（IndexedDB）；基础样式表在 HMR / 热更新时同步刷新；主按钮 hover
+  保持蓝底白字。`scripts/smoke.mjs` 25 项。
 - **0.1.2** — 上架包：补 `locale/en.json` + `locale/zh.json`（插件管理页那一行标题/描述，此前只能回退到
   `package.json` 里那段中英混合的长 description）、补 `LICENSE`、`exports` 增加 `./locale/*.json`、
   `files` 增加 `locale/*.json`。功能与 0.1.1 一致，`lib/client.js` 字节未变。

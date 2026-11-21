@@ -8,8 +8,9 @@
  *
  * 设计边界（遵循 DSH 插件前端三条硬限制）：
  *  - 只用增量槽位：`plugins.bundle.config`（包详情页配置区，0.2.x）/ `settings.plugin.item`
- *    （旧版设置页，按 boot graph 自动二选一）、`sidebar.footer.action`；
- *  - 不注册 root / sidebar / conversation 等父级 single 槽位；
+ *    （旧版设置页，按 boot graph 自动二选一）、
+ *    `sidebar.panellist`（左侧栏面板入口）与 `main`（keyed，仅 key=wallpaper-studio）；
+ *  - 不替换 root / sidebar / rightbar / conversation 等父级 single 槽位；
  *  - 不 import 任何 `@deepseek-ai/*` 的值（只 require('react')）。
  */
 
@@ -20,6 +21,7 @@ const h = React.createElement;
 
 const PLUGIN_ID = 'dsh-wallpaper-studio';
 const NS = 'dsh-wallpaper-studio';
+const PANEL_ID = 'wallpaper-studio';
 const STYLE_ID = 'dws-base-style';
 const TOKENS_STYLE_ID = 'dws-tokens';
 const LAYER_ID = 'dws-bg';
@@ -38,6 +40,22 @@ const zh = {
   subtitle: '动态壁纸 · 主题色 · 透明度',
   toggle: '启用',
   offHint: '已关闭，界面恢复原生外观。',
+  openPanel: '在左侧栏打开壁纸工作室',
+  panelShort: '面板',
+  closePanel: '返回对话',
+  enableWallpaper: '启用壁纸',
+  panelHint: '在左侧栏点「壁纸工作室」随时回来；所有改动即时生效，配置只保存在这台电脑的浏览器里。',
+  save: '保存',
+  saveConfig: '保存配置',
+  saveHint: '立即写入本机浏览器；平时改动也会自动保存',
+  saved: '已保存',
+  saveFailed: '保存失败',
+  saveFailedDetail: '保存失败：改动只在本次会话生效，请检查浏览器存储权限或可用空间。',
+  autoSaveOn: '自动保存已开启',
+  savedAt: '已保存',
+  imported: '已导入',
+  uploadFailed: '壁纸读取失败',
+  shareMediaHint: '上传的图片 / 视频不会写进 JSON，换电脑后需要重新上传。',
   secWallpaper: '动态壁纸',
   uploadImage: '上传图片',
   uploadVideo: '上传视频',
@@ -76,7 +94,7 @@ const zh = {
   presetForest: '森林',
   presetRose: '樱粉',
   presetIce: '冰川',
-  secShare: '配置导入导出',
+  secShare: '配置保存与导入导出',
   exportBtn: '复制配置',
   importBtn: '导入配置',
   importPlaceholder: '粘贴导出的 JSON…',
@@ -84,7 +102,6 @@ const zh = {
   copied: '已复制',
   invalid: '配置无效',
   hint: '壁纸铺在界面最底层，面板 / 输入框 / 弹层的不透明度可分别调。壁纸偏亮时把「遮罩暗度」调高一点，正文更清楚。想让正文压在图上也清楚、又不想把壁纸糊成一片，就调「界面磨砂」——它只模糊面板背后那一层。',
-  toggleTip: '壁纸工作室：动态壁纸开关',
   wp_aurora: '极光流动',
   wp_midnight: '午夜星尘',
   wp_forest: '森林晨雾',
@@ -99,6 +116,22 @@ const en = {
   subtitle: 'Dynamic wallpaper · theme colour · transparency',
   toggle: 'Enabled',
   offHint: 'Off — the native look is restored.',
+  openPanel: 'Open Wallpaper Studio in the left sidebar',
+  panelShort: 'Panel',
+  closePanel: 'Back to conversation',
+  enableWallpaper: 'Turn wallpaper on',
+  panelHint: 'Reopen it from the left sidebar at any time. Changes apply instantly and stay in this browser.',
+  save: 'Save',
+  saveConfig: 'Save config',
+  saveHint: 'Write the current config to this browser now; changes also auto-save',
+  saved: 'Saved',
+  saveFailed: 'Save failed',
+  saveFailedDetail: 'Save failed: changes last only for this session. Check browser storage permission or free space.',
+  autoSaveOn: 'Auto-save is on',
+  savedAt: 'Saved',
+  imported: 'Imported',
+  uploadFailed: 'Could not read the wallpaper',
+  shareMediaHint: 'Uploaded images / videos are not written into the JSON; upload them again on another computer.',
   secWallpaper: 'Wallpaper',
   uploadImage: 'Upload image',
   uploadVideo: 'Upload video',
@@ -137,7 +170,7 @@ const en = {
   presetForest: 'Forest',
   presetRose: 'Rose',
   presetIce: 'Ice',
-  secShare: 'Export / import',
+  secShare: 'Save / export / import',
   exportBtn: 'Copy config',
   importBtn: 'Import config',
   importPlaceholder: 'Paste the exported JSON…',
@@ -145,7 +178,6 @@ const en = {
   copied: 'Copied',
   invalid: 'Invalid config',
   hint: 'The wallpaper sits behind the whole UI; panel, input and menu opacities are independent. Raise the scrim when the wallpaper is bright. Interface frost blurs only the layer behind panels, so the wallpaper itself stays sharp; 12-24px is a good start.',
-  toggleTip: 'Wallpaper Studio — toggle wallpaper',
   wp_aurora: 'Aurora',
   wp_midnight: 'Midnight dust',
   wp_forest: 'Forest mist',
@@ -392,11 +424,13 @@ function loadSettings() {
 }
 
 function saveSettings(settings) {
-  if (!HAS_DOM) return;
+  if (!HAS_DOM) return false;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    return true;
   } catch (err) {
-    /* 隐私模式 / 配额满：忽略，内存态仍然生效 */
+    /* 隐私模式 / 配额满：内存态仍然生效，但要把失败告诉界面 */
+    return false;
   }
 }
 
@@ -516,13 +550,6 @@ html[data-dws-active] :is([class*="_tabHost_"],[class*="_sidebarCol"],[class*="_
    免得浮窗被推到偏移位置。 */
 html[data-dws-active] :is([class*="_tabHost_"],[class*="_sidebarCol"],[class*="_rightbarCol"],[class*="_bottomRow"]):has([class*="_floatingCell_"]){-webkit-backdrop-filter:none;backdrop-filter:none;}
 
-/* 侧栏底部快速开关 */
-.dws-toggle{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2,transparent);background:transparent;color:var(--dsw-alias-label-secondary,inherit);font-size:12px;line-height:1;cursor:pointer;transition:background .16s ease,color .16s ease;}
-.dws-toggle:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.14));}
-.dws-toggle__dot{width:8px;height:8px;border-radius:50%;background:var(--dsw-alias-label-quaternary,#9aa0aa);}
-.dws-toggle.is-on .dws-toggle__dot{background:var(--dsw-alias-brand-primary,#4176e6);}
-.dws-toggle.is-on{color:var(--dsw-alias-label-primary,inherit);}
-
 /* 设置卡片 */
 .dws-card{margin:0 0 10px;padding:0;border-radius:14px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.22));background:var(--dsw-alias-bg-layer-2,#fff);overflow:hidden;}
 .dws-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none;}
@@ -547,7 +574,8 @@ html[data-dws-active] :is([class*="_tabHost_"],[class*="_sidebarCol"],[class*="_
 .dws-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 11px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.28));background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,inherit);font-size:12px;cursor:pointer;transition:background .16s ease,border-color .16s ease;}
 .dws-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12));}
 .dws-btn--ghost{background:transparent;}
-.dws-btn--primary{background:var(--dsw-alias-brand-primary,#4176e6);color:#fff;border-color:transparent;}
+.dws-btn--primary{background:var(--dsw-alias-button-info-fill,#4176e6);color:#fff;border-color:transparent;}
+.dws-btn--primary:hover{background:var(--dsw-alias-button-info-fill,#4176e6);filter:brightness(1.1);}
 .dws-btn--danger{color:var(--dsw-alias-state-error-primary,#d34a4a);}
 .dws-btn[disabled]{opacity:.55;cursor:default;}
 .dws-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:8px;}
@@ -566,6 +594,30 @@ html[data-dws-active] :is([class*="_tabHost_"],[class*="_sidebarCol"],[class*="_
 .dws-note{font-size:11px;line-height:1.6;color:var(--dsw-alias-label-tertiary,#8b909a);}
 .dws-note--warn{color:var(--dsw-alias-state-error-primary,#d34a4a);}
 .dws-files{display:flex;flex-wrap:wrap;gap:7px;}
+
+/* 左侧栏面板页：壁纸工作室 */
+.dws-page{display:flex;flex-direction:column;height:100%;min-height:0;overflow:auto;background:var(--dsw-alias-bg-base,#f6f7f9);color:var(--dsw-alias-label-primary,inherit);-webkit-backdrop-filter:blur(16px) saturate(1.04);backdrop-filter:blur(16px) saturate(1.04);}
+.dws-page__inner{display:flex;flex-direction:column;gap:18px;width:100%;max-width:1040px;margin:0 auto;box-sizing:border-box;padding:28px clamp(20px,4vw,48px) 56px;}
+.dws-hero{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.dws-hero__mark{display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:0 0 auto;border-radius:13px;color:#fff;background:linear-gradient(130deg,#1f97a8,#5b3f9e);box-shadow:0 8px 20px rgba(31,151,168,.22);}
+.dws-hero__tt{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.dws-hero__title{margin:0;font-size:20px;line-height:1.3;font-weight:650;letter-spacing:.2px;color:var(--dsw-alias-label-primary,inherit);}
+.dws-hero__sub{margin:0;font-size:12px;color:var(--dsw-alias-label-tertiary,#8b909a);}
+.dws-hero__actions{display:flex;align-items:center;gap:10px;margin-left:auto;}
+.dws-hero__switch{display:flex;align-items:center;gap:8px;padding:4px 6px 4px 11px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.22));background:var(--dsw-alias-bg-layer-1,#fff);}
+.dws-hero__switch>span{font-size:12px;color:var(--dsw-alias-label-secondary,#5a6070);}
+.dws-banner{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.22));background:var(--dsw-alias-bg-layer-2,#fff);}
+.dws-banner .dws-note{margin-right:auto;font-size:12px;}
+.dws-openbtn{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:28px;padding:0 9px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary,#5a6070);font-size:11px;cursor:pointer;}
+.dws-openbtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12));color:var(--dsw-alias-label-primary,inherit);}
+
+/* 面板里把原卡片的六个分区摊成卡片网格：壁纸与导入导出通栏，中间两列 */
+.dws-card--bare{margin:0;background:transparent;border:0;border-radius:0;overflow:visible;}
+.dws-card--bare .dws-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:0;align-items:start;}
+.dws-card--bare .dws-body>.dws-sec{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 1px 2px rgba(16,24,40,.04);}
+.dws-card--bare .dws-body>.dws-sec:first-child,.dws-card--bare .dws-body>.dws-sec:last-child,.dws-card--bare .dws-body>.dws-note{grid-column:1/-1;}
+.dws-card--bare .dws-sec__title{font-size:13px;font-weight:650;}
+@media (max-width:900px){.dws-card--bare .dws-body{grid-template-columns:1fr;}.dws-hero__actions{width:100%;margin-left:0;justify-content:flex-end;}}
 `;
 
 /* ======================================================================
@@ -582,7 +634,12 @@ let baseColor = '#111318';
 
 function ensureBaseStyle() {
   if (!HAS_DOM) return;
-  if (document.getElementById(STYLE_ID)) return;
+  const existing = document.getElementById(STYLE_ID);
+  if (existing) {
+    /* HMR / 热更新时旧 <style> 会留着；sheet 变了就刷新，否则新 CSS 永不生效 */
+    if (existing.textContent !== SHEET) existing.textContent = SHEET;
+    return;
+  }
   const el = document.createElement('style');
   el.id = STYLE_ID;
   el.dataset.plugin = PLUGIN_ID;
@@ -895,14 +952,30 @@ function createStore(initial) {
 
 function createController(store, opts) {
   const options = opts || {};
+  const saveStore = createStore({ ok: true, at: 0 });
+  const markSave = function (ok) {
+    saveStore.set({ ok: ok === true, at: Date.now() });
+  };
   const commit = function (next) {
     const normalized = normSettings(next);
+    const previous = store.get();
     store.set(normalized);
-    saveSettings(normalized);
+    markSave(saveSettings(normalized));
     try {
       applyAll(normalized);
     } catch (err) {
       if (options.warn) options.warn('[dsh-wallpaper-studio] apply failed', err);
+    }
+    /* 切走某个上传壁纸时把它从 IndexedDB 里清掉，避免素材越积越多 */
+    if (
+      previous &&
+      previous.media &&
+      previous.media.kind === 'upload' &&
+      previous.media.blobId &&
+      !(normalized.media.kind === 'upload' && normalized.media.blobId === previous.media.blobId)
+    ) {
+      revokeOne(previous.media.blobId);
+      idbDelete(previous.media.blobId);
     }
     return normalized;
   };
@@ -910,6 +983,15 @@ function createController(store, opts) {
   return {
     getSnapshot: store.get,
     subscribe: store.subscribe,
+    saveState: {
+      getSnapshot: saveStore.get,
+      subscribe: saveStore.subscribe,
+    },
+    save: function () {
+      const ok = saveSettings(store.get());
+      markSave(ok);
+      return ok;
+    },
     patch: function (patch) {
       const current = store.get();
       const next = Object.assign({}, current, patch);
@@ -1058,6 +1140,64 @@ function ColorRow(props) {
   );
 }
 
+function formatClock(ts) {
+  try {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (err) {
+    return '';
+  }
+}
+
+/* 显式保存：把当前配置立刻写进 localStorage，并把成败告诉用户。
+   平时每次改动仍会自动保存；这个按钮用于确认 / 重试，也是「保存失败」的唯一出口。 */
+function SaveButton(props) {
+  const t = props.t;
+  const controller = props.controller;
+  const [result, setResult] = React.useState('');
+  const timer = React.useRef(null);
+  const onClick = function (e) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    let ok = false;
+    try {
+      ok = controller.save();
+    } catch (err) {
+      ok = false;
+    }
+    setResult(ok ? t('saved') : t('saveFailed'));
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(function () {
+      setResult('');
+    }, 2200);
+  };
+  React.useEffect(function () {
+    return function () {
+      if (timer.current) window.clearTimeout(timer.current);
+    };
+  }, []);
+  return h(
+    'button',
+    {
+      type: 'button',
+      className: props.compact ? 'dws-btn dws-btn--ghost' : props.primary ? 'dws-btn dws-btn--primary' : 'dws-btn',
+      title: t('saveHint'),
+      onClick: onClick,
+    },
+    result || (props.compact ? t('save') : t('saveConfig'))
+  );
+}
+
+/* 自动保存状态：顶部卡片与面板里都能看到，保存失败时红字提示。 */
+function SaveStatus(props) {
+  const t = props.t;
+  const controller = props.controller;
+  const save = React.useSyncExternalStore(controller.saveState.subscribe, controller.saveState.getSnapshot);
+  if (save && save.ok === false) {
+    return h('span', { className: 'dws-note dws-note--warn' }, t('saveFailedDetail'));
+  }
+  if (!save || !save.at) return h('span', { className: 'dws-note' }, t('autoSaveOn'));
+  return h('span', { className: 'dws-note' }, t('savedAt') + ' · ' + formatClock(save.at));
+}
+
 function WallpaperNone(props) {
   return h(
     'button',
@@ -1070,6 +1210,39 @@ function WallpaperNone(props) {
   );
 }
 
+/* 壁纸图标：圆角画框 + 山脊 + 太阳。侧栏入口、卡片按钮、面板标题共用。 */
+function StudioGlyph(props) {
+  const size = props.size || 18;
+  return h(
+    'svg',
+    {
+      width: size,
+      height: size,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      'aria-hidden': 'true',
+      focusable: 'false',
+    },
+    h('rect', {
+      x: 3.6,
+      y: 4.6,
+      width: 16.8,
+      height: 14.8,
+      rx: 3,
+      stroke: 'currentColor',
+      strokeWidth: 1.6,
+    }),
+    h('circle', { cx: 8.9, cy: 9.7, r: 1.55, fill: 'currentColor' }),
+    h('path', {
+      d: 'M4.8 17.5l3.8-4.2a1.3 1.3 0 0 1 1.9 0l2.3 2.6 1.5-1.6a1.3 1.3 0 0 1 1.9 0l3.7 3.8',
+      stroke: 'currentColor',
+      strokeWidth: 1.6,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+    })
+  );
+}
+
 function SettingsCard(props) {
   const t = props.t;
   const controller = props.controller;
@@ -1078,18 +1251,26 @@ function SettingsCard(props) {
   const [busy, setBusy] = React.useState(false);
   const [url, setUrl] = React.useState('');
   const [importText, setImportText] = React.useState('');
-  const [flash, setFlash] = React.useState('');
+  const [flash, setFlash] = React.useState(null);
+  const flashTimer = React.useRef(null);
 
   const patch = function (p) {
     controller.patch(p);
   };
 
-  const flashMsg = function (msg, bad) {
-    setFlash((bad ? '!' : '') + msg);
-    window.setTimeout(function () {
-      setFlash('');
-    }, 1800);
+  const flashMsg = function (msg, bad, where) {
+    setFlash({ text: msg, bad: bad === true, where: where || 'share' });
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(function () {
+      setFlash(null);
+    }, 2200);
   };
+
+  React.useEffect(function () {
+    return function () {
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    };
+  }, []);
 
   const pick = function (accept) {
     return new Promise(function (resolve) {
@@ -1109,7 +1290,7 @@ function SettingsCard(props) {
       setBusy(true);
       controller.upload(file).then(function (ok) {
         setBusy(false);
-        if (!ok) flashMsg(t('invalid'), true);
+        if (!ok) flashMsg(t('uploadFailed'), true, 'wallpaper');
       });
     });
   };
@@ -1124,11 +1305,14 @@ function SettingsCard(props) {
       : media.kind === 'url'
       ? media.url
       : t('none');
+  const bare = props.bare === true;
 
   return h(
     'div',
-    { className: 'dws-card' },
-    h(
+    { className: 'dws-card' + (bare ? ' dws-card--bare' : '') },
+    bare
+      ? null
+      : h(
       'div',
       {
         className: 'dws-head',
@@ -1146,6 +1330,24 @@ function SettingsCard(props) {
       h(
         'div',
         { className: 'dws-head__right' },
+        h(SaveButton, { t: t, controller: controller, compact: true }),
+        props.canOpenPanel && typeof props.openPanel === 'function'
+          ? h(
+              'button',
+              {
+                type: 'button',
+                className: 'dws-openbtn',
+                title: t('openPanel'),
+                'aria-label': t('openPanel'),
+                onClick: function (e) {
+                  e.stopPropagation();
+                  props.openPanel();
+                },
+              },
+              h(StudioGlyph, { size: 14 }),
+              h('span', null, t('panelShort'))
+            )
+          : null,
         h(
           'button',
           {
@@ -1161,9 +1363,9 @@ function SettingsCard(props) {
         )
       )
     ),
-    !state.enabled
+    !state.enabled && !bare
       ? h('div', { className: 'dws-off' }, t('offHint'))
-      : open
+      : open || bare
       ? h(
           'div',
           { className: 'dws-body' },
@@ -1235,6 +1437,13 @@ function SettingsCard(props) {
                   )
                 : null
             ),
+            flash && flash.where === 'wallpaper'
+              ? h(
+                  'span',
+                  { className: 'dws-note' + (flash.bad ? ' dws-note--warn' : '') },
+                  flash.text
+                )
+              : null,
             h(
               'div',
               { className: 'dws-row' },
@@ -1424,6 +1633,7 @@ function SettingsCard(props) {
             h(
               'div',
               { className: 'dws-files' },
+              h(SaveButton, { t: t, controller: controller, primary: true }),
               h(
                 'button',
                 {
@@ -1433,7 +1643,7 @@ function SettingsCard(props) {
                     const text = controller.exportText();
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                       navigator.clipboard.writeText(text).then(
-                        function () { flashMsg(t('copied')); },
+                        function () { flashMsg(t('copied'), false, 'share'); },
                         function () { setImportText(text); }
                       );
                     } else {
@@ -1453,6 +1663,7 @@ function SettingsCard(props) {
                 t('resetAll')
               )
             ),
+            h(SaveStatus, { t: t, controller: controller }),
             h('input', {
               className: 'dws-input',
               type: 'text',
@@ -1461,6 +1672,7 @@ function SettingsCard(props) {
               value: importText,
               onChange: function (e) { setImportText(e.target.value); },
             }),
+            h('span', { className: 'dws-note' }, t('shareMediaHint')),
             h(
               'div',
               { className: 'dws-files' },
@@ -1474,19 +1686,19 @@ function SettingsCard(props) {
                     const res = controller.importText(importText);
                     if (res) {
                       setImportText('');
-                      flashMsg(t('copied'));
+                      flashMsg(t('imported'), false, 'share');
                     } else {
-                      flashMsg(t('invalid'), true);
+                      flashMsg(t('invalid'), true, 'share');
                     }
                   },
                 },
                 t('apply')
               ),
-              flash
+              flash && flash.where === 'share'
                 ? h(
                     'span',
-                    { className: 'dws-note' + (flash.charAt(0) === '!' ? ' dws-note--warn' : '') },
-                    flash.replace(/^!/, '')
+                    { className: 'dws-note' + (flash.bad ? ' dws-note--warn' : '') },
+                    flash.text
                   )
                 : null
             ),
@@ -1497,23 +1709,86 @@ function SettingsCard(props) {
   );
 }
 
-function ToggleButton(props) {
+/* 左侧栏面板页：同一个控制器、同一份设置，摊成一张全宽控制面板。 */
+function StudioPanel(props) {
   const t = props.t;
   const controller = props.controller;
   const state = React.useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const close = typeof props.close === 'function' ? props.close : function () {};
   return h(
-    'button',
-    {
-      type: 'button',
-      className: 'dws-toggle' + (state.enabled ? ' is-on' : ''),
-      title: t('toggleTip'),
-      onClick: function () {
-        controller.patch({ enabled: !state.enabled });
-      },
-    },
-    h('span', { className: 'dws-toggle__dot' }),
-    h('span', null, t('nav'))
+    'div',
+    { className: 'dws-page' },
+    h(
+      'div',
+      { className: 'dws-page__inner' },
+      h(
+        'div',
+        { className: 'dws-hero' },
+        h('div', { className: 'dws-hero__mark' }, h(StudioGlyph, { size: 22 })),
+        h(
+          'div',
+          { className: 'dws-hero__tt' },
+          h('h1', { className: 'dws-hero__title' }, t('nav')),
+          h('p', { className: 'dws-hero__sub' }, t('subtitle'))
+        ),
+        h(
+          'div',
+          { className: 'dws-hero__actions' },
+          h(SaveButton, { t: t, controller: controller, compact: true }),
+          h(
+            'button',
+            { type: 'button', className: 'dws-btn dws-btn--ghost', onClick: close },
+            t('closePanel')
+          ),
+          h(
+            'div',
+            { className: 'dws-hero__switch' },
+            h('span', null, t('toggle')),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dws-switch' + (state.enabled ? ' is-on' : ''),
+                role: 'switch',
+                'aria-checked': state.enabled ? 'true' : 'false',
+                'aria-label': t('toggle'),
+                title: t('toggle'),
+                onClick: function () {
+                  controller.patch({ enabled: !state.enabled });
+                },
+              },
+              h('span', { className: 'dws-switch__knob' })
+            )
+          )
+        )
+      ),
+      state.enabled
+        ? null
+        : h(
+            'div',
+            { className: 'dws-banner' },
+            h('span', { className: 'dws-note' }, t('offHint')),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dws-btn dws-btn--primary',
+                onClick: function () {
+                  controller.patch({ enabled: true });
+                },
+              },
+              t('enableWallpaper')
+            )
+          ),
+      h(SettingsCard, { t: t, controller: controller, bare: true }),
+      h('p', { className: 'dws-note' }, t('panelHint'))
+    )
   );
+}
+
+/* 左侧栏面板行的图标：侧栏按 size 给出图标边长，用 currentColor 跟随主题。 */
+function WallpaperPanelIcon(props) {
+  return h(StudioGlyph, { size: props.size || 18 });
 }
 
 /* ======================================================================
@@ -1534,6 +1809,27 @@ exports.apply = function apply(ctx) {
       }
     },
   });
+
+  /* 文案：左侧栏面板行、面板页与卡片按钮共用同一份词典 */
+  var t = typeof ctx.locale.bind === 'function' ? ctx.locale.bind(NS) : function (key) { return key; };
+
+  /* 布局服务负责「主区面板」；旧宿主没有它时只保留设置卡片，退化不报错。 */
+  function layoutService() {
+    try {
+      return typeof ctx.get === 'function' ? ctx.get('layout') : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function openPanel() {
+    try {
+      var layout = layoutService();
+      if (layout && typeof layout.selectPanel === 'function') layout.selectPanel(PANEL_ID);
+    } catch (err) {
+      /* 主区面板还没注册时保持原状 */
+    }
+  }
 
   /* 首次投影 + 卸载时还原原生外观 */
   ctx.effect(
@@ -1583,7 +1879,13 @@ exports.apply = function apply(ctx) {
         label: 'wallpaperStudio', /* locale 键：插件页标签文案 */
         order: order,
         inject: function () {
-          return { controller: controller };
+          var layout = layoutService();
+          return {
+            controller: controller,
+            /* 只有宿主提供布局服务时才显示「在左侧栏打开」按钮 */
+            canOpenPanel: !!(layout && typeof layout.selectPanel === 'function'),
+            openPanel: openPanel,
+          };
         },
       };
       options[identity] = NS;
@@ -1598,19 +1900,44 @@ exports.apply = function apply(ctx) {
   if (HAS_PLUGIN_MANAGER !== false) registerCardSlot('plugins.bundle.config', 'key', 0);
   if (HAS_PLUGIN_MANAGER !== true) registerCardSlot('settings.plugin.item', 'key', 100);
 
-  /* 侧栏底部快速开关（槽位不存在时静默等待，不报错） */
-  ctx.slots.inject('sidebar.footer.action', function () {
+  /* 左侧栏面板入口 + 对应的主区页面：同一个 controller、同一份 localStorage 设置。
+     槽位没被当前宿主声明时 inject 只等待，不会报错，也不会影响已有卡片。 */
+  ctx.slots.inject('sidebar.panellist', function () {
     return ctx.slots.register(
       {
-        name: 'sidebar.footer.action',
-        id: PLUGIN_ID + '-toggle',
-        order: 10,
+        name: 'sidebar.panellist',
+        id: PANEL_ID,
+        order: 15,
+        label: function () {
+          return t('nav');
+        },
+        locale: NS,
+      },
+      WallpaperPanelIcon
+    );
+  });
+
+  ctx.slots.inject('main', function () {
+    return ctx.slots.register(
+      {
+        name: 'main',
+        key: PANEL_ID,
         locale: NS,
         inject: function () {
-          return { controller: controller };
+          return {
+            controller: controller,
+            close: function () {
+              try {
+                var layout = layoutService();
+                if (layout && typeof layout.selectPanel === 'function') layout.selectPanel(null);
+              } catch (err) {
+                /* 无布局服务时保持面板打开 */
+              }
+            },
+          };
         },
       },
-      ToggleButton
+      StudioPanel
     );
   });
 };
